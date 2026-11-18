@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulador de Semáforo con Base de Datos</title>
+<style>
+  :root {
+    --fondo: #f3f4f6;
+    --panel: #ffffff;
+    --texto: #1f2937;
+    --suave: #6b7280;
+    --borde: #d1d5db;
+    --acento: #1d4ed8;
+    --rojo: #ef4444;
+    --amarillo: #f59e0b;
+    --verde: #22c55e;
+    --apagado: #2b2f36;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Segoe UI", Roboto, Arial, sans-serif;
+    background: var(--fondo);
+    color: var(--texto);
+  }
+  header {
+    background: #111827;
+    color: #fff;
+    padding: 14px 20px;
+  }
+  header h1 { margin: 0; font-size: 1.25rem; }
+  header p { margin: 4px 0 0; font-size: .85rem; color: #9ca3af; }
+
+  nav {
+    display: flex;
+    gap: 4px;
+    padding: 0 12px;
+    background: #1f2937;
+    overflow-x: auto;
+  }
+  nav button {
+    background: none;
+    border: none;
+    color: #d1d5db;
+    padding: 12px 14px;
+    font-size: .95rem;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    white-space: nowrap;
+  }
+  nav button.activa { color: #fff; border-bottom-color: var(--amarillo); }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  .vista { display: none; }
+  .vista.activa { display: block; }
+
+  .tarjeta {
+    background: var(--panel);
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+  .tarjeta h2 { margin: 0 0 12px; font-size: 1.05rem; }
+
+  /* ---------- Simulador ---------- */
+  .simulador {
+    display: grid;
+    grid-template-columns: auto auto 1fr;
+    gap: 24px;
+    align-items: start;
+  }
+  .poste { display: flex; flex-direction: column; align-items: center; }
+  .poste span { margin-top: 8px; font-size: .8rem; color: var(--suave); }
+  .carcasa {
+    background: #111827;
+    border-radius: 18px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: inset 0 0 0 3px #374151;
+  }
+  .luz {
+    width: 78px;
+    height: 78px;
+    border-radius: 50%;
+    background: var(--apagado);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    font-size: .7rem;
+    font-weight: 700;
+    transition: background .15s, box-shadow .15s;
+  }
+  .luz.peaton { width: 60px; height: 60px; font-size: 1.6rem; }
+  .luz.encendida { color: #111827; }
+  .luz.rojo.encendida     { background: var(--rojo);     box-shadow: 0 0 22px var(--rojo); }
+  .luz.amarillo.encendida { background: var(--amarillo); box-shadow: 0 0 22px var(--amarillo); }
+  .luz.verde.encendida    { background: var(--verde);    box-shadow: 0 0 22px var(--verde); }
+
+  .estado-actual { font-size: 2rem; font-weight: 800; margin: 0; }
+  .contador { font-size: 3.2rem; font-weight: 800; font-variant-numeric: tabular-nums; margin: 4px 0; }
+  .detalle { color: var(--suave); margin: 0 0 12px; font-size: .9rem; }
+
+  .grupo { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+  .btn {
+    border: 1px solid var(--borde);
+    background: #fff;
+    color: var(--texto);
+    padding: 9px 14px;
+    border-radius: 8px;
+    font-size: .9rem;
+    cursor: pointer;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--acento); }
+  .btn:disabled { opacity: .45; cursor: not-allowed; }
+  .btn.primario { background: var(--acento); color: #fff; border-color: var(--acento); }
+  .btn.peligro  { background: #b91c1c; color: #fff; border-color: #b91c1c; }
+  .btn.sel { background: #111827; color: #fff; border-color: #111827; }
+
+  label { font-size: .85rem; color: var(--suave); display: block; margin-bottom: 4px; }
+  input, select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    font-size: .95rem;
+    background: #fff;
+  }
+  .fila { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 12px; }
+
+  /* ---------- Tablas ---------- */
+  .tabla-cont { overflow-x: auto; max-height: 420px; }
+  table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+  th, td { padding: 8px 10px; border-bottom: 1px solid #e5e7eb; text-align: left; white-space: nowrap; }
+  th { background: #f9fafb; position: sticky; top: 0; }
+  tr.activo td { background: #eff6ff; font-weight: 600; }
+  .chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+  .chip.ROJO { background: #fee2e2; color: #991b1b; }
+  .chip.AMARILLO { background: #fef3c7; color: #92400e; }
+  .chip.VERDE { background: #dcfce7; color: #166534; }
+  .chip.APAGADO, .chip.MODO { background: #e5e7eb; color: #374151; }
+
+  .mensaje { padding: 10px 12px; border-radius: 8px; margin-bottom: 12px; font-size: .9rem; display: none; }
+  .mensaje.ok { display: block; background: #dcfce7; color: #166534; }
+  .mensaje.error { display: block; background: #fee2e2; color: #991b1b; }
+
+  /* ---------- Estadísticas ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .kpi { border: 1px solid var(--borde); border-radius: 10px; padding: 12px; }
+  .kpi b { display: block; font-size: 1.6rem; }
+  .kpi small { color: var(--suave); }
+  .barra { display: grid; grid-template-columns: 90px 1fr 110px; gap: 10px; align-items: center; margin-bottom: 8px; font-size: .9rem; }
+  .pista { background: #e5e7eb; border-radius: 6px; height: 18px; overflow: hidden; }
+  .relleno { height: 100%; }
+  textarea { width: 100%; min-height: 140px; font-family: Consolas, monospace; font-size: .8rem; border: 1px solid var(--borde); border-radius: 8px; padding: 8px; }
+
+  .nota-bd { font-size: .8rem; color: var(--suave); }
+
+  @media (max-width: 720px) {
+    .simulador { grid-template-columns: auto auto; }
+    .panel-estado { grid-column: 1 / -1; }
+    .luz { width: 62px; height: 62px; }
+    .luz.peaton { width: 48px; height: 48px; }
+    .contador { font-size: 2.6rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Simulador de Semáforo con Base de Datos</h1>
+  <p>Taller 4 · Retos y resolución de problemas · Máquina de estados + persistencia local</p>
+</header>
+
+<nav>
+  <button class="activa" data-vista="v-simulador">Simulador</button>
+  <button data-vista="v-perfiles">Perfiles de tiempo</button>
+  <button data-vista="v-bitacora">Bitácora</button>
+  <button data-vista="v-estadisticas">Estadísticas y exportación</button>
+</nav>
+
+<main>
+  <!-- ===================== RF1 + RF4: SIMULADOR ===================== -->
+  <section id="v-simulador" class="vista activa">
+    <div class="tarjeta">
+      <div class="simulador">
+        <div class="poste">
+          <div class="carcasa" aria-hidden="true">
+            <div class="luz rojo" id="luz-rojo">ROJO</div>
+            <div class="luz amarillo" id="luz-amarillo">AMARILLO</div>
+            <div class="luz verde" id="luz-verde">VERDE</div>
+          </div>
+          <span>Vehicular</span>
+        </div>
+        <div class="poste">
+          <div class="carcasa" aria-hidden="true">
+            <div class="luz peaton rojo" id="peaton-rojo">✋</div>
+            <div class="luz peaton verde" id="peaton-verde">🚶</div>
+          </div>
+          <span>Peatonal</span>
+        </div>
+
+        <div class="panel-estado">
+          <p class="estado-actual" id="txt-estado" aria-live="polite">ROJO</p>
+          <p class="contador" id="txt-contador">--</p>
+          <p class="detalle" id="txt-detalle">Modo: Automático · Perfil: —</p>
+
+          <label>Modo de operación</label>
+          <div class="grupo" id="grupo-modos">
+            <button class="btn sel" data-modo="AUTOMATICO">Automático</button>
+            <button class="btn" data-modo="MANUAL">Manual</button>
+            <button class="btn" data-modo="INTERMITENTE">Intermitente (nocturno)</button>
+            <button class="btn" data-modo="EMERGENCIA">Todo rojo (emergencia)</button>
+          </div>
+
+          <div class="grupo">
+            <button class="btn primario" id="btn-pausa">Pausar</button>
+            <button class="btn" id="btn-siguiente" disabled>Siguiente estado ▶</button>
+            <button class="btn" id="btn-reiniciar">Reiniciar ciclo</button>
+          </div>
+
+          <div class="fila">
+            <div>
+              <label for="sel-perfil-sim">Perfil activo</label>
+              <select id="sel-perfil-sim"></select>
+            </div>
+            <div>
+              <label for="sel-velocidad">Velocidad de simulación</label>
+              <select id="sel-velocidad">
+                <option value="1">x1 (tiempo real)</option>
+                <option value="2">x2</option>
+                <option value="5">x5</option>
+                <option value="10">x10</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== RF2: PERFILES (CRUD) ===================== -->
+  <section id="v-perfiles" class="vista">
+    <div class="tarjeta">
+      <h2 id="titulo-form">Nuevo perfil de tiempos</h2>
+      <div class="mensaje" id="msg-perfil"></div>
+      <form id="form-perfil" novalidate>
+        <input type="hidden" id="perfil-id">
+        <div class="fila">
+          <div><label for="perfil-nombre">Nombre</label><input id="perfil-nombre" maxlength="30" placeholder="Ej.: Hora pico"></div>
+          <div><label for="perfil-rojo">Rojo (s)</label><input id="perfil-rojo" type="number" min="5" max="120" value="30"></div>
+          <div><label for="perfil-verde">Verde (s)</label><input id="perfil-verde" type="number" min="5" max="120" value="25"></div>
+          <div><label for="perfil-amarillo">Amarillo (s)</label><input id="perfil-amarillo" type="number" min="3" max="6" value="4"></div>
+        </div>
+        <div class="grupo">
+          <button class="btn primario" type="submit" id="btn-guardar">Guardar perfil</button>
+          <button class="btn" type="button" id="btn-cancelar">Cancelar edición</button>
+        </div>
+        <p class="nota-bd">Rojo y verde: 5–120 s. Amarillo: 3–6 s (intervalo de cambio recomendado).</p>
+      </form>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Perfiles registrados</h2>
+      <div class="tabla-cont">
+        <table>
+          <thead><tr><th>ID</th><th>Nombre</th><th>Rojo</th><th>Verde</th><th>Amarillo</th><th>Ciclo</th><th>Acciones</th></tr></thead>
+          <tbody id="tabla-perfiles"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== RF3: BITÁCORA ===================== -->
+  <section id="v-bitacora" class="vista">
+    <div class="tarjeta">
+      <h2>Bitácora de eventos</h2>
+      <div class="fila">
+        <div>
+          <label for="filtro-estado">Filtrar por estado nuevo</label>
+          <select id="filtro-estado">
+            <option value="">Todos</option>
+            <option>ROJO</option><option>VERDE</option><option>AMARILLO</option><option>APAGADO</option>
+          </select>
+        </div>
+        <div>
+          <label for="filtro-modo">Filtrar por modo</label>
+          <select id="filtro-modo">
+            <option value="">Todos</option>
+            <option>AUTOMATICO</option><option>MANUAL</option><option>INTERMITENTE</option><option>EMERGENCIA</option>
+          </select>
+        </div>
+        <div>
+          <label>&nbsp;</label>
+          <button class="btn peligro" id="btn-vaciar" style="width:100%">Vaciar bitácora</button>
+        </div>
+      </div>
+      <p class="nota-bd" id="txt-total-eventos"></p>
+      <div class="tabla-cont">
+        <table>
+          <thead><tr><th>ID</th><th>Fecha y hora</th><th>Tipo</th><th>Anterior</th><th>Nuevo</th><th>Duración (s)</th><th>Modo</th><th>Perfil</th></tr></thead>
+          <tbody id="tabla-eventos"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== RF5: ESTADÍSTICAS ===================== -->
+  <section id="v-estadisticas" class="vista">
+    <div class="tarjeta">
+      <h2>Indicadores</h2>
+      <div class="kpis">
+        <div class="kpi"><small>Ciclos completos</small><b id="kpi-ciclos">0</b></div>
+        <div class="kpi"><small>Cambios de estado</small><b id="kpi-cambios">0</b></div>
+        <div class="kpi"><small>Tiempo registrado</small><b id="kpi-tiempo">0 s</b></div>
+        <div class="kpi"><small>Perfiles</small><b id="kpi-perfiles">0</b></div>
+      </div>
+      <h2>Tiempo acumulado por estado</h2>
+      <div id="barras"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2>Exportar base de datos</h2>
+      <div class="grupo">
+        <button class="btn" id="btn-csv">Generar CSV de bitácora</button>
+        <button class="btn" id="btn-json">Generar JSON completo</button>
+        <button class="btn primario" id="btn-copiar">Copiar</button>
+        <a class="btn" id="lnk-descarga" style="display:none;text-decoration:none">Descargar archivo</a>
+      </div>
+      <textarea id="txt-export" readonly placeholder="Seleccione un formato para generar la exportación"></textarea>
+      <p class="nota-bd" id="txt-persistencia"></p>
+    </div>
+  </section>
+</main>
+
+<script>
+"use strict";
+
+/* =====================================================================
+   1. CAPA DE DATOS: base de datos local con tablas, IDs autoincrementales
+      y operaciones CRUD sobre localStorage (con respaldo en memoria).
+   ===================================================================== */
+class BaseDatos {
+  constructor(nombre) {
+    this.nombre = nombre;
+    this.persistente = true;
+    this.datos = null;
+    this.cargar();
+  }
+
+  esquemaVacio() {
+    return {
+      secuencias: { perfiles: 0, eventos: 0 },
+      perfiles: [],
+      eventos: [],
+      config: { perfilActivo: null }
+    };
+  }
+
+  cargar() {
+    try {
+      const crudo = localStorage.getItem(this.nombre);
+      this.datos = crudo ? JSON.parse(crudo) : null;
+    } catch (e) {
+      this.persistente = false;   // almacenamiento bloqueado: se trabaja en memoria
+      this.datos = null;
+    }
+    if (!this.datos || !this.datos.secuencias) this.datos = this.esquemaVacio();
+  }
+
+  guardar() {
+    if (!this.persistente) return;
+    try {
+      localStorage.setItem(this.nombre, JSON.stringify(this.datos));
+    } catch (e) {
+      this.persistente = false;
+    }
+  }
+
+  insertar(tabla, registro) {
+    const id = ++this.datos.secuencias[tabla];
+    const fila = { id, ...registro };
+    this.datos[tabla].push(fila);
+    this.guardar();
+    return fila;
+  }
+
+  seleccionar(tabla, condicion = () => true) {
+    return this.datos[tabla].filter(condicion);
+  }
+
+  buscarPorId(tabla, id) {
+    return this.datos[tabla].find(f => f.id === id) || null;
+  }
+
+  actualizar(tabla, id, cambios) {
+    const fila = this.buscarPorId(tabla, id);
+    if (!fila) return null;
+    Object.assign(fila, cambios);
+    this.guardar();
+    return fila;
+  }
+
+  eliminar(tabla, id) {
+    const antes = this.datos[tabla].length;
+    this.datos[tabla] = this.datos[tabla].filter(f => f.id !== id);
+    this.guardar();
+    return this.datos[tabla].length < antes;
+  }
+
+  vaciar(tabla) {
+    this.datos[tabla] = [];
+    this.guardar();
+  }
+}
+
+const bd = new BaseDatos("semaforo_bd_v1");
+
+// Datos semilla si la base está vacía
+if (bd.seleccionar("perfiles").length === 0) {
+  const p = bd.insertar("perfiles", { nombre: "Estándar", rojo: 30, verde: 25, amarillo: 4 });
+  bd.insertar("perfiles", { nombre: "Hora pico", rojo: 20, verde: 40, amarillo: 4 });
+  bd.insertar("perfiles", { nombre: "Demostración", rojo: 8, verde: 6, amarillo: 3 });
+  bd.datos.config.perfilActivo = p.id;
+  bd.guardar();
+}
+
+/* =====================================================================
+   2. LÓGICA: máquina de estados finitos del semáforo
+   ===================================================================== */
+const SIGUIENTE = { ROJO: "VERDE", VERDE: "AMARILLO", AMARILLO: "ROJO" };
+const MODOS = { AUTOMATICO: "Automático", MANUAL: "Manual", INTERMITENTE: "Intermitente", EMERGENCIA: "Todo rojo" };
+
+const sim = {
+  estado: "ROJO",        // ROJO | VERDE | AMARILLO | APAGADO
+  modo: "AUTOMATICO",
+  restanteMs: 0,          // tiempo que falta para cambiar de estado
+  enEstadoMs: 0,          // tiempo simulado acumulado en el estado actual
+  ultimoTick: Date.now(),
+  pausado: false,
+  velocidad: 1,
+  parpadeo: false,
+  intervalo: null
+};
+
+function perfilActivo() {
+  let p = bd.buscarPorId("perfiles", bd.datos.config.perfilActivo);
+  if (!p) {
+    p = bd.seleccionar("perfiles")[0];
+    bd.datos.config.perfilActivo = p.id;
+    bd.guardar();
+  }
+  return p;
+}
+
+function duracionDe(estado) {
+  const p = perfilActivo();
+  return { ROJO: p.rojo, VERDE: p.verde, AMARILLO: p.amarillo }[estado] * 1000;
+}
+
+function registrarEvento(tipo, anterior, nuevo) {
+  const duracion = Math.round(sim.enEstadoMs / 1000);
+  bd.insertar("eventos", {
+    fecha: new Date().toISOString(),
+    tipo,
+    anterior,
+    nuevo,
+    duracion,
+    modo: sim.modo,
+    perfil: perfilActivo().nombre
+  });
+}
+
+function cambiarEstado(nuevo, tipo = "ESTADO") {
+  const anterior = sim.estado;
+  registrarEvento(tipo, anterior, nuevo);
+  sim.estado = nuevo;
+  sim.enEstadoMs = 0;
+  sim.restanteMs = (nuevo in SIGUIENTE) ? duracionDe(nuevo) : 0;
+  render();
+}
+
+function tick() {
+  const ahora = Date.now();
+  const transcurrido = (ahora - sim.ultimoTick) * sim.velocidad;
+  sim.ultimoTick = ahora;
+  if (!sim.pausado) sim.enEstadoMs += transcurrido;
+
+  if (sim.modo === "INTERMITENTE") {
+    sim.parpadeo = Math.floor(ahora / 500) % 2 === 0;
+    renderLuces();
+    return;
+  }
+  if (sim.pausado || sim.modo !== "AUTOMATICO") return;
+
+  sim.restanteMs -= transcurrido;
+  if (sim.restanteMs <= 0) {
+    cambiarEstado(SIGUIENTE[sim.estado]);
+  } else {
+    renderContador();
+    renderLuces();
+  }
+}
+
+function cambiarModo(modo) {
+  if (modo === sim.modo) return;
+  const anterior = sim.estado;
+  sim.modo = modo;
+  sim.pausado = false;
+
+  if (modo === "INTERMITENTE") {
+    cambiarEstado("APAGADO", "MODO");          // vehicular: amarillo destellante
+  } else if (modo === "EMERGENCIA") {
+    cambiarEstado("ROJO", "MODO");             // todo rojo
+  } else {
+    // AUTOMATICO o MANUAL: se reanuda desde ROJO por seguridad
+    const nuevo = anterior === "APAGADO" ? "ROJO" : anterior;
+    cambiarEstado(nuevo, "MODO");
+  }
+}
+
+function avanzarManual() {
+  if (sim.modo !== "MANUAL") return;
+  cambiarEstado(SIGUIENTE[sim.estado]);
+}
+
+function reiniciarCiclo() {
+  if (sim.modo === "INTERMITENTE" || sim.modo === "EMERGENCIA") cambiarModo("AUTOMATICO");
+  sim.pausado = false;
+  cambiarEstado("ROJO");
+}
+
+function iniciar() {
+  sim.restanteMs = duracionDe(sim.estado);
+  sim.enEstadoMs = 0;
+  sim.ultimoTick = Date.now();
+  sim.intervalo = setInterval(tick, 100);
+  render();
+}
+
+/* =====================================================================
+   3. PRESENTACIÓN: actualización de la interfaz
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+
+function renderLuces() {
+  const e = sim.estado;
+  const intermitente = sim.modo === "INTERMITENTE";
+  $("luz-rojo").classList.toggle("encendida", e === "ROJO");
+  $("luz-verde").classList.toggle("encendida", e === "VERDE");
+  $("luz-amarillo").classList.toggle("encendida", e === "AMARILLO" || (intermitente && sim.parpadeo));
+
+  // Peatonal: verde solo cuando el vehicular está en ROJO en modos de ciclo;
+  // parpadea los últimos 3 s para advertir el fin del cruce.
+  const cicloNormal = sim.modo === "AUTOMATICO" || sim.modo === "MANUAL";
+  const cruce = cicloNormal && e === "ROJO";
+  const advertencia = sim.modo === "AUTOMATICO" && sim.restanteMs <= 3000 && Math.floor(Date.now() / 400) % 2 === 0;
+  $("peaton-verde").classList.toggle("encendida", cruce && !advertencia);
+  $("peaton-rojo").classList.toggle("encendida", !cruce && !intermitente);
+}
+
+function renderContador() {
+  if (sim.modo === "AUTOMATICO") {
+    $("txt-contador").textContent = Math.max(0, Math.ceil(sim.restanteMs / 1000)) + " s";
+  } else {
+    $("txt-contador").textContent = "--";
+  }
+}
+
+function render() {
+  const etiquetas = { ROJO: "ROJO · Detenerse", VERDE: "VERDE · Avanzar", AMARILLO: "AMARILLO · Precaución", APAGADO: "AMARILLO INTERMITENTE" };
+  $("txt-estado").textContent = etiquetas[sim.estado];
+  $("txt-detalle").textContent = `Modo: ${MODOS[sim.modo]}${sim.pausado ? " (en pausa)" : ""} · Perfil: ${perfilActivo().nombre}`;
+  $("btn-siguiente").disabled = sim.modo !== "MANUAL";
+  $("btn-pausa").disabled = sim.modo !== "AUTOMATICO";
+  $("btn-pausa").textContent = sim.pausado ? "Reanudar" : "Pausar";
+  document.querySelectorAll("#grupo-modos .btn").forEach(b => b.classList.toggle("sel", b.dataset.modo === sim.modo));
+  renderContador();
+  renderLuces();
+  renderBitacora();
+  renderEstadisticas();
+}
+
+function renderSelectorPerfiles() {
+  const sel = $("sel-perfil-sim");
+  sel.innerHTML = "";
+  bd.seleccionar("perfiles").forEach(p => {
+    const o = document.createElement("option");
+    o.value = p.id;
+    o.textContent = `${p.nombre} (${p.rojo}/${p.verde}/${p.amarillo} s)`;
+    sel.appendChild(o);
+  });
+  sel.value = perfilActivo().id;
+}
+
+function renderPerfiles() {
+  const activo = perfilActivo().id;
+  $("tabla-perfiles").innerHTML = bd.seleccionar("perfiles").map(p => `
+    <tr class="${p.id === activo ? "activo" : ""}">
+      <td>${p.id}</td>
+      <td>${escaparHTML(p.nombre)}${p.id === activo ? " (activo)" : ""}</td>
+      <td>${p.rojo} s</td><td>${p.verde} s</td><td>${p.amarillo} s</td>
+      <td>${p.rojo + p.verde + p.amarillo} s</td>
+      <td>
+        <button class="btn" data-accion="editar" data-id="${p.id}">Editar</button>
+        <button class="btn" data-accion="activar" data-id="${p.id}">Usar</button>
+        <button class="btn peligro" data-accion="eliminar" data-id="${p.id}">Eliminar</button>
+      </td>
+    </tr>`).join("");
+  renderSelectorPerfiles();
+}
+
+function renderBitacora() {
+  const fe = $("filtro-estado").value;
+  const fm = $("filtro-modo").value;
+  const filas = bd.seleccionar("eventos", ev => (!fe || ev.nuevo === fe) && (!fm || ev.modo === fm));
+  $("txt-total-eventos").textContent = `${filas.length} registro(s) encontrados · se muestran los 200 más recientes`;
+  $("tabla-eventos").innerHTML = filas.slice(-200).reverse().map(ev => `
+    <tr>
+      <td>${ev.id}</td>
+      <td>${new Date(ev.fecha).toLocaleString("es-CO")}</td>
+      <td><span class="chip MODO">${ev.tipo}</span></td>
+      <td><span class="chip ${ev.anterior}">${ev.anterior}</span></td>
+      <td><span class="chip ${ev.nuevo}">${ev.nuevo}</span></td>
+      <td>${ev.duracion}</td>
+      <td>${ev.modo}</td>
+      <td>${escaparHTML(ev.perfil)}</td>
+    </tr>`).join("");
+}
+
+function calcularEstadisticas() {
+  const eventos = bd.seleccionar("eventos");
+  const porEstado = { ROJO: 0, VERDE: 0, AMARILLO: 0 };
+  let ciclos = 0;
+  eventos.forEach(ev => {
+    if (ev.anterior in porEstado) porEstado[ev.anterior] += ev.duracion;
+    if (ev.tipo === "ESTADO" && ev.anterior === "AMARILLO" && ev.nuevo === "ROJO") ciclos++;
+  });
+  const total = porEstado.ROJO + porEstado.VERDE + porEstado.AMARILLO;
+  return { ciclos, cambios: eventos.filter(e => e.tipo === "ESTADO").length, porEstado, total };
+}
+
+function renderEstadisticas() {
+  const s = calcularEstadisticas();
+  $("kpi-ciclos").textContent = s.ciclos;
+  $("kpi-cambios").textContent = s.cambios;
+  $("kpi-tiempo").textContent = s.total + " s";
+  $("kpi-perfiles").textContent = bd.seleccionar("perfiles").length;
+  const colores = { ROJO: "var(--rojo)", VERDE: "var(--verde)", AMARILLO: "var(--amarillo)" };
+  $("barras").innerHTML = Object.keys(s.porEstado).map(k => {
+    const pct = s.total ? Math.round(s.porEstado[k] / s.total * 100) : 0;
+    return `<div class="barra"><span>${k}</span>
+      <div class="pista"><div class="relleno" style="width:${pct}%;background:${colores[k]}"></div></div>
+      <span>${s.porEstado[k]} s · ${pct}%</span></div>`;
+  }).join("");
+  $("txt-persistencia").textContent = bd.persistente
+    ? "Persistencia activa: los datos se conservan en el almacenamiento local del navegador."
+    : "Almacenamiento local no disponible: los datos se conservan solo durante esta sesión.";
+}
+
+function escaparHTML(t) {
+  return String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+/* =====================================================================
+   4. CONTROLADORES: perfiles (CRUD con validación)
+   ===================================================================== */
+function mostrarMensaje(texto, tipo) {
+  const m = $("msg-perfil");
+  m.textContent = texto;
+  m.className = "mensaje " + tipo;
+}
+
+function validarPerfil(datos, idActual) {
+  if (!datos.nombre) return "El nombre es obligatorio.";
+  const repetido = bd.seleccionar("perfiles", p => p.nombre.toLowerCase() === datos.nombre.toLowerCase() && p.id !== idActual);
+  if (repetido.length) return "Ya existe un perfil con ese nombre.";
+  for (const k of ["rojo", "verde"]) {
+    if (!Number.isInteger(datos[k]) || datos[k] < 5 || datos[k] > 120) return `El tiempo en ${k} debe ser un entero entre 5 y 120 s.`;
+  }
+  if (!Number.isInteger(datos.amarillo) || datos.amarillo < 3 || datos.amarillo > 6) return "El amarillo debe ser un entero entre 3 y 6 s.";
+  return null;
+}
+
+function limpiarFormulario() {
+  $("form-perfil").reset();
+  $("perfil-id").value = "";
+  $("titulo-form").textContent = "Nuevo perfil de tiempos";
+}
+
+$("form-perfil").addEventListener("submit", ev => {
+  ev.preventDefault();
+  const id = $("perfil-id").value ? Number($("perfil-id").value) : null;
+  const datos = {
+    nombre: $("perfil-nombre").value.trim(),
+    rojo: Number($("perfil-rojo").value),
+    verde: Number($("perfil-verde").value),
+    amarillo: Number($("perfil-amarillo").value)
+  };
+  const error = validarPerfil(datos, id);
+  if (error) return mostrarMensaje(error, "error");
+
+  if (id) {
+    bd.actualizar("perfiles", id, datos);
+    mostrarMensaje(`Perfil "${datos.nombre}" actualizado.`, "ok");
+  } else {
+    const nuevo = bd.insertar("perfiles", datos);
+    mostrarMensaje(`Perfil "${nuevo.nombre}" creado con ID ${nuevo.id}.`, "ok");
+  }
+  limpiarFormulario();
+  renderPerfiles();
+  render();
+});
+
+$("btn-cancelar").addEventListener("click", () => { limpiarFormulario(); $("msg-perfil").className = "mensaje"; });
+
+$("tabla-perfiles").addEventListener("click", ev => {
+  const b = ev.target.closest("button");
+  if (!b) return;
+  const id = Number(b.dataset.id);
+  const p = bd.buscarPorId("perfiles", id);
+  if (!p) return;
+
+  if (b.dataset.accion === "editar") {
+    $("perfil-id").value = p.id;
+    $("perfil-nombre").value = p.nombre;
+    $("perfil-rojo").value = p.rojo;
+    $("perfil-verde").value = p.verde;
+    $("perfil-amarillo").value = p.amarillo;
+    $("titulo-form").textContent = `Editando perfil #${p.id}`;
+    $("perfil-nombre").focus();
+  } else if (b.dataset.accion === "activar") {
+    activarPerfil(id);
+    mostrarMensaje(`Perfil "${p.nombre}" en uso.`, "ok");
+  } else if (b.dataset.accion === "eliminar") {
+    if (id === perfilActivo().id) return mostrarMensaje("No se puede eliminar el perfil activo.", "error");
+    if (bd.seleccionar("perfiles").length <= 1) return mostrarMensaje("Debe existir al menos un perfil.", "error");
+    bd.eliminar("perfiles", id);
+    mostrarMensaje(`Perfil "${p.nombre}" eliminado.`, "ok");
+    renderPerfiles();
+    render();
+  }
+});
+
+function activarPerfil(id) {
+  bd.datos.config.perfilActivo = id;
+  bd.guardar();
+  if (sim.estado in SIGUIENTE) sim.restanteMs = Math.min(sim.restanteMs, duracionDe(sim.estado));
+  renderPerfiles();
+  render();
+}
+
+/* =====================================================================
+   5. CONTROLADORES: simulador, bitácora y exportación
+   ===================================================================== */
+document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => {
+  document.querySelectorAll("nav button").forEach(x => x.classList.toggle("activa", x === b));
+  document.querySelectorAll(".vista").forEach(v => v.classList.toggle("activa", v.id === b.dataset.vista));
+}));
+
+$("grupo-modos").addEventListener("click", ev => {
+  const b = ev.target.closest("button");
+  if (b) cambiarModo(b.dataset.modo);
+});
+$("btn-pausa").addEventListener("click", () => { sim.pausado = !sim.pausado; sim.ultimoTick = Date.now(); render(); });
+$("btn-siguiente").addEventListener("click", avanzarManual);
+$("btn-reiniciar").addEventListener("click", reiniciarCiclo);
+$("sel-perfil-sim").addEventListener("change", e => activarPerfil(Number(e.target.value)));
+$("sel-velocidad").addEventListener("change", e => { sim.velocidad = Number(e.target.value); });
+$("filtro-estado").addEventListener("change", renderBitacora);
+$("filtro-modo").addEventListener("change", renderBitacora);
+
+let confirmarVaciado = false;
+$("btn-vaciar").addEventListener("click", () => {
+  if (!confirmarVaciado) {
+    confirmarVaciado = true;
+    $("btn-vaciar").textContent = "¿Confirmar? Pulse de nuevo";
+    setTimeout(() => { confirmarVaciado = false; $("btn-vaciar").textContent = "Vaciar bitácora"; }, 3000);
+    return;
+  }
+  confirmarVaciado = false;
+  bd.vaciar("eventos");
+  $("btn-vaciar").textContent = "Vaciar bitácora";
+  render();
+});
+
+function generarCSV() {
+  const cab = "id,fecha,tipo,anterior,nuevo,duracion_s,modo,perfil";
+  const filas = bd.seleccionar("eventos").map(e =>
+    [e.id, e.fecha, e.tipo, e.anterior, e.nuevo, e.duracion, e.modo, '"' + e.perfil.replace(/"/g, '""') + '"'].join(","));
+  return [cab, ...filas].join("\n");
+}
+
+function prepararExportacion(contenido, nombre, tipo) {
+  $("txt-export").value = contenido;
+  const lnk = $("lnk-descarga");
+  try {
+    lnk.href = URL.createObjectURL(new Blob([contenido], { type: tipo }));
+    lnk.download = nombre;
+    lnk.textContent = "Descargar " + nombre;
+    lnk.style.display = "inline-block";
+  } catch (e) { lnk.style.display = "none"; }
+}
+
+$("btn-csv").addEventListener("click", () => prepararExportacion(generarCSV(), "bitacora_semaforo.csv", "text/csv"));
+$("btn-json").addEventListener("click", () => prepararExportacion(JSON.stringify(bd.datos, null, 2), "semaforo_bd.json", "application/json"));
+$("btn-copiar").addEventListener("click", async () => {
+  const t = $("txt-export");
+  if (!t.value) return;
+  try { await navigator.clipboard.writeText(t.value); $("btn-copiar").textContent = "Copiado ✓"; }
+  catch (e) { t.select(); $("btn-copiar").textContent = "Seleccionado: use Ctrl+C"; }
+  setTimeout(() => { $("btn-copiar").textContent = "Copiar"; }, 2000);
+});
+
+/* =====================================================================
+   6. ARRANQUE
+   ===================================================================== */
+renderPerfiles();
+iniciar();
+</script>
+</body>
+</html>
